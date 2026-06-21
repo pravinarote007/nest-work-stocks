@@ -12,6 +12,9 @@ __pycache__/
 .venv/
 venv/
 
+# Runtime-saved shared report (server-side JSON store)
+data/
+
 # Large source media (the Excel tutorial videos)
 *.mp4
 

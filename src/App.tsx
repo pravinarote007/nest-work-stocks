@@ -13,7 +13,7 @@ import {
 import { plainSymbol } from "./engine/keys";
 import { fetchOhlc, toEngineInputs, type FetchedOhlc } from "./engine/ohlcClient";
 import type { EngineInputs, ScreenResult } from "./engine/types";
-import { clearResult, loadResult, saveResult, TTL_MS } from "./storage";
+import { clearResult, loadResult, saveResult } from "./storage";
 
 const SCANNER_SLOTS: SlotSpec[] = [
   {
@@ -65,9 +65,8 @@ export default function App() {
   const [auto, setAuto] = useState<FetchedOhlc | null>(null);
   const [fetching, setFetching] = useState(false);
   const [status, setStatus] = useState<string>("");
-  const restored = useMemo(() => loadResult(), []);
-  const [result, setResult] = useState<ScreenResult | null>(restored?.result ?? null);
-  const [savedAt, setSavedAt] = useState<number | null>(restored?.savedAt ?? null);
+  const [result, setResult] = useState<ScreenResult | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [error, setError] = useState<string>("");
   const [theme, setTheme] = useState<"dark" | "light">(
     () => (localStorage.getItem("hyperscan:theme") as "dark" | "light") || "dark",
@@ -78,9 +77,26 @@ export default function App() {
     localStorage.setItem("hyperscan:theme", theme);
   }, [theme]);
 
+  // Load the shared latest report (server-backed) once on mount.
+  useEffect(() => {
+    let alive = true;
+    void loadResult().then((r) => {
+      if (alive && r) {
+        setResult(r.result);
+        setSavedAt(r.savedAt);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const onLoad = (id: string, text: string) => {
     setFiles((f) => ({ ...f, [id]: text }));
     if (id === "curr" || id === "pre" || id === "mrsi") setAuto(null); // manual overrides auto
+    // Uploading new input clears the currently shown report (a fresh scan is being prepared).
+    setResult(null);
+    setSavedAt(null);
   };
 
   // Universe for auto-fetch is taken from whichever scanner file is present.
@@ -145,16 +161,16 @@ export default function App() {
       }
       const res = runScreen(inputs);
       setResult(res);
-      setSavedAt(saveResult(res)); // persist; overwrites any prior saved report
+      setSavedAt(Date.now());
+      void saveResult(res).then(setSavedAt); // share globally; overwrites prior report
       window.scrollTo({ top: 0, behavior: "smooth" }); // results render above the form
-
     } catch (e) {
       setError(`Failed to generate: ${(e as Error).message}`);
     }
   }
 
   function handleClearSaved() {
-    clearResult();
+    void clearResult(); // clears the shared report for everyone
     setSavedAt(null);
     setResult(null);
   }
@@ -187,11 +203,11 @@ export default function App() {
           {savedAt && (
             <div className="prev-banner">
               <span>
-                Showing your last scan · saved {new Date(savedAt).toLocaleString()} · auto-expires{" "}
-                {new Date(savedAt + TTL_MS).toLocaleString()}.
+                Shared latest scan · generated {new Date(savedAt).toLocaleString()} · visible to
+                everyone until a new scan is generated or it is reset.
               </span>
               <button className="ghost" onClick={handleClearSaved}>
-                Clear & start fresh
+                Reset (clear for everyone)
               </button>
             </div>
           )}

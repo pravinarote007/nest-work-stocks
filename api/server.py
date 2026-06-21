@@ -5,13 +5,16 @@ Local dev:   uvicorn server:app --port 8000   (from the api/ directory)
 Production:  the multi-stage Dockerfile builds the SPA into ../dist; this server then
              serves it at "/", so the app and API share one origin (no CORS needed)."""
 
+import time
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import report_store
 from bhavcopy import fetch_monthly_ohlc
 
 app = FastAPI(title="HyperScan OHLC API")
@@ -34,6 +37,35 @@ def ohlc(req: OhlcRequest):
 
 @app.get("/api/health")
 def health():
+    return {"ok": True}
+
+
+# ---- Shared latest report (global to all users; no DB, just one JSON file) ----
+
+
+class ReportPayload(BaseModel):
+    report: Any
+    savedAt: int | None = None
+
+
+@app.get("/api/report")
+def get_report():
+    """The latest shared report, or {"report": null} if none/reset."""
+    return report_store.load() or {"report": None, "savedAt": None}
+
+
+@app.put("/api/report")
+def put_report(p: ReportPayload):
+    """Save/replace the shared report (called when a user generates results)."""
+    saved_at = p.savedAt or int(time.time() * 1000)
+    report_store.save(p.report, saved_at)
+    return {"savedAt": saved_at}
+
+
+@app.delete("/api/report")
+def delete_report():
+    """Clear the shared report (reset)."""
+    report_store.clear()
     return {"ok": True}
 
 
