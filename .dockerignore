@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.vercel
+.netlify
+**/__pycache__
+*.pyc
+.venv
+venv
+# Never bake local dev env into the production build (would point the app at localhost).
+.env.local
+.env.*.local
+# Large media / data not needed in the image.
+*.mp4
+Bhavik
+.claude

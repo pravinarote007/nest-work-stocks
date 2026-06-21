@@ -1,0 +1,25 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.vercel/
+*.local
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Large source media (the Excel tutorial videos)
+*.mp4
+
+# Proprietary sample data + Excel workbooks — not committed.
+Bhavik/
+.cmp/
+.cmp2/
+
+# Editor
+.DS_Store
+.vscode/
