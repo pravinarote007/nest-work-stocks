@@ -95,17 +95,56 @@ def _download_day(session: requests.Session, dt: date) -> dict[str, dict[str, fl
     return out
 
 
-def _aggregate_month(days_data: list[tuple[date, dict[str, dict[str, float]]]], symbol: str):
-    """Aggregate one symbol's daily bars (ordered oldest->newest) into a monthly bar."""
-    bars = [(dt, d[symbol]) for dt, d in days_data if symbol in d]
+def _agg_bars(bars: list[dict[str, float]]):
+    """Aggregate a symbol's daily bars (oldest->newest) into one OHLC bar."""
     if not bars:
         return None
-    bars.sort(key=lambda x: x[0])
-    o = bars[0][1]["open"]
-    c = bars[-1][1]["close"]
-    h = max(b[1]["high"] for b in bars)
-    l = min(b[1]["low"] for b in bars)
-    return {"open": o, "high": h, "low": l, "close": c}
+    return {
+        "open": bars[0]["open"],
+        "close": bars[-1]["close"],
+        "high": max(b["high"] for b in bars),
+        "low": min(b["low"] for b in bars),
+    }
+
+
+# A split/bonus shows as a large, clean overnight gap (open vs prior close). NSE F&O large
+# caps almost never gap this far without a corporate action, so we treat it as one.
+_SPLIT_LOW = 0.72   # ~>28% down  (e.g. 1:2 bonus -> x0.667)
+_SPLIT_HIGH = 1.40  # ~>40% up    (reverse split / consolidation)
+
+
+def _detect_splits(series: list[tuple[date, dict[str, float]]]) -> list[tuple[date, float]]:
+    """Return [(event_date, factor)]: prices strictly BEFORE event_date must be multiplied
+    by `factor` to sit on the post-event (current) price scale."""
+    events: list[tuple[date, float]] = []
+    for i in range(1, len(series)):
+        prev_close = series[i - 1][1]["close"]
+        open_ = series[i][1]["open"]
+        if prev_close > 0 and open_ > 0:
+            r = open_ / prev_close
+            if r < _SPLIT_LOW or r > _SPLIT_HIGH:
+                events.append((series[i][0], r))
+    return events
+
+
+def _adjust_series(series: list[tuple[date, dict[str, float]]]):
+    """Back-adjust a daily series for detected splits. Returns (adjusted_series, events,
+    period_factor) where period_factor (product of all events) adjusts any price dated
+    before the window (the yearly/quarterly opens)."""
+    events = _detect_splits(series)
+    if not events:
+        return series, events, 1.0
+    period_factor = 1.0
+    for _dt, f in events:
+        period_factor *= f
+    adjusted: list[tuple[date, dict[str, float]]] = []
+    for dt, ohlc in series:
+        f = 1.0
+        for ed, ef in events:
+            if dt < ed:
+                f *= ef
+        adjusted.append((dt, {k: v * f for k, v in ohlc.items()}) if f != 1.0 else (dt, ohlc))
+    return adjusted, events, period_factor
 
 
 def _period_open(session: requests.Session, year: int, month: int) -> dict[str, float]:
@@ -142,8 +181,9 @@ def fetch_monthly_ohlc(symbols: list[str], months: int = 2, today: date | None =
 
     results = list(ThreadPoolExecutor(max_workers=8).map(fetch, all_days))
 
-    curr_data = [(dt, d) for tag, dt, d in results if tag == "curr" and d]
-    prev_data = [(dt, d) for tag, dt, d in results if tag == "prev" and d]
+    # Per-(tag, date) day maps, in chronological order within each tag.
+    prev_days_data = sorted(((dt, d) for tag, dt, d in results if tag == "prev" and d), key=lambda x: x[0])
+    curr_days_data = sorted(((dt, d) for tag, dt, d in results if tag == "curr" and d), key=lambda x: x[0])
 
     # Calendar period opens for relative-strength ranking (Yearly / Quarterly).
     qtr_start_month = ((cm - 1) // 3) * 3 + 1
@@ -152,31 +192,45 @@ def fetch_monthly_ohlc(symbols: list[str], months: int = 2, today: date | None =
 
     data: dict[str, Any] = {}
     errors: dict[str, str] = {}
-    universe = wanted or {
-        sym for _dt, d in curr_data + prev_data for sym in d
-    }
+    splits: dict[str, Any] = {}
+    universe = wanted or {sym for _dt, d in prev_days_data + curr_days_data for sym in d}
+
     for sym in universe:
-        cur = _aggregate_month(curr_data, sym)
-        pre = _aggregate_month(prev_data, sym)
-        if cur is None:
+        # Chronological prev+curr daily series for this symbol, tagged so we can split them
+        # back out after adjustment.
+        prev_series = [(dt, d[sym]) for dt, d in prev_days_data if sym in d]
+        curr_series = [(dt, d[sym]) for dt, d in curr_days_data if sym in d]
+        if not curr_series:
             errors[sym] = "no current-month data"
             continue
+
+        n_prev = len(prev_series)
+        adjusted, events, period_factor = _adjust_series(prev_series + curr_series)
+        pre = _agg_bars([o for _dt, o in adjusted[:n_prev]])
+        cur = _agg_bars([o for _dt, o in adjusted[n_prev:]])
+
         bars = []
         if pre is not None:
             bars.append({"date": date(py, pm, 1).isoformat(), **pre})
         bars.append({"date": date(cy, cm, 1).isoformat(), **cur})
+        yo = year_open.get(sym)
+        qo = qtr_open.get(sym)
         data[sym] = {
             "months": bars,
-            "yearOpen": year_open.get(sym),
-            "quarterOpen": qtr_open.get(sym),
+            # Period opens predate the window, so apply the full split adjustment.
+            "yearOpen": yo * period_factor if yo else None,
+            "quarterOpen": qo * period_factor if qo else None,
         }
+        if events:
+            splits[sym] = [{"date": ed.isoformat(), "factor": round(ef, 4)} for ed, ef in events]
 
     meta = {
-        "currentMonthDays": len(curr_data),
-        "previousMonthDays": len(prev_data),
+        "currentMonthDays": len(curr_days_data),
+        "previousMonthDays": len(prev_days_data),
         "asOf": today.isoformat(),
         "yearOpenStocks": len(year_open),
         "quarterOpenStocks": len(qtr_open),
         "quarterStartMonth": qtr_start_month,
+        "splitAdjusted": splits,
     }
     return {"data": data, "errors": errors, "meta": meta}
