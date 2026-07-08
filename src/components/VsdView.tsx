@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import type { VsdResult, VsdRow } from "../engine/vsd";
 import { triggerDownload } from "../export/toCsv";
+import { passesFilter } from "./tableFilter";
 
 interface VCol {
   id: string;
@@ -58,9 +59,19 @@ function value(r: VsdRow, c: VCol): string | number {
 function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
   const [sortId, setSortId] = useState(columns[0].id);
   const [asc, setAsc] = useState(true);
+  const [filters, setFilters] = useState<Record<string, string>>({});
   const col = columns.find((c) => c.id === sortId) ?? columns[0];
+
+  const filtered = useMemo(() => {
+    const active = columns.filter((c) => filters[c.id]?.trim());
+    if (active.length === 0) return rows;
+    return rows.filter((r) =>
+      active.every((c) => passesFilter(text(r, c), Number(c.get(r)), filters[c.id], c.digits != null)),
+    );
+  }, [rows, columns, filters]);
+
   const sorted = useMemo(() => {
-    const copy = [...rows];
+    const copy = [...filtered];
     copy.sort((a, b) => {
       const av = col.get(a);
       const bv = col.get(b);
@@ -71,11 +82,23 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
       return asc ? cmp : -cmp;
     });
     return copy;
-  }, [rows, col, asc]);
+  }, [filtered, col, asc]);
 
+  const activeFilters = Object.values(filters).some((v) => v?.trim());
   if (rows.length === 0) return <div className="empty">No stocks.</div>;
   return (
-    <div className="table-wrap">
+    <>
+      <div className="table-meta">
+        <span className="muted">
+          {sorted.length} of {rows.length} rows{activeFilters ? " (filtered)" : ""}
+        </span>
+        {activeFilters && (
+          <button className="ghost" onClick={() => setFilters({})}>
+            Clear filters
+          </button>
+        )}
+      </div>
+      <div className="table-wrap">
       <table>
         <thead>
           <tr>
@@ -86,6 +109,18 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
               >
                 {c.label}
                 {sortId === c.id ? (asc ? " ▲" : " ▼") : ""}
+              </th>
+            ))}
+          </tr>
+          <tr className="filter-row">
+            {columns.map((c) => (
+              <th key={c.id}>
+                <input
+                  value={filters[c.id] ?? ""}
+                  onChange={(e) => setFilters((f) => ({ ...f, [c.id]: e.target.value }))}
+                  placeholder={c.digits != null ? ">0" : "filter"}
+                  onClick={(e) => e.stopPropagation()}
+                />
               </th>
             ))}
           </tr>
@@ -111,7 +146,8 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 

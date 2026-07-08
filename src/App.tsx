@@ -4,6 +4,9 @@ import { MARKETS } from "./markets";
 
 export default function App() {
   const [marketId, setMarketId] = useState<string>(MARKETS[0].id);
+  // Markets stay mounted once visited, so switching tabs preserves their state and does
+  // NOT re-fetch the report each time.
+  const [mounted, setMounted] = useState<string[]>([MARKETS[0].id]);
   const [theme, setTheme] = useState<"dark" | "light">(
     () => (localStorage.getItem("hyperscan:theme") as "dark" | "light") || "dark",
   );
@@ -13,7 +16,10 @@ export default function App() {
     localStorage.setItem("hyperscan:theme", theme);
   }, [theme]);
 
-  const market = MARKETS.find((m) => m.id === marketId) ?? MARKETS[0];
+  function select(id: string) {
+    setMarketId(id);
+    setMounted((m) => (m.includes(id) ? m : [...m, id]));
+  }
 
   return (
     <div className="shell">
@@ -32,7 +38,7 @@ export default function App() {
             <button
               key={m.id}
               className={`nav-item ${m.id === marketId ? "active" : ""}`}
-              onClick={() => setMarketId(m.id)}
+              onClick={() => select(m.id)}
             >
               <span className="nav-item-label">{m.label}</span>
               <span className="nav-item-sub">{m.blurb}</span>
@@ -51,8 +57,13 @@ export default function App() {
       </aside>
 
       <main className="content">
-        {/* key remounts the page per market so each loads its own shared report + fresh state */}
-        <MarketPage key={market.id} market={market} />
+        {/* Each visited market stays mounted (state preserved, no re-fetch on tab switch);
+            inactive ones are just hidden. */}
+        {MARKETS.filter((m) => mounted.includes(m.id)).map((m) => (
+          <div key={m.id} style={{ display: m.id === marketId ? "block" : "none" }}>
+            <MarketPage market={m} />
+          </div>
+        ))}
       </main>
     </div>
   );

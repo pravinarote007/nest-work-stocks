@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { SummaryRow } from "../engine/types";
 import { cellText, RESULT_COLUMNS, type ColumnDef } from "./columns";
+import { passesFilter } from "./tableFilter";
 
 function renderCell(row: SummaryRow, col: ColumnDef) {
   const text = cellText(row, col);
@@ -29,10 +30,19 @@ export function ResultsTable({
 }) {
   const [sortId, setSortId] = useState(columns[0].id);
   const [asc, setAsc] = useState(true);
+  const [filters, setFilters] = useState<Record<string, string>>({});
   const sortCol = columns.find((c) => c.id === sortId) ?? columns[0];
 
+  const filtered = useMemo(() => {
+    const active = columns.filter((c) => filters[c.id]?.trim());
+    if (active.length === 0) return rows;
+    return rows.filter((r) =>
+      active.every((c) => passesFilter(cellText(r, c), Number(c.get(r)), filters[c.id], c.digits != null)),
+    );
+  }, [rows, columns, filters]);
+
   const sorted = useMemo(() => {
-    const copy = [...rows];
+    const copy = [...filtered];
     copy.sort((a, b) => {
       const av = sortCol.get(a);
       const bv = sortCol.get(b);
@@ -45,7 +55,7 @@ export function ResultsTable({
       return asc ? cmp : -cmp;
     });
     return copy;
-  }, [rows, sortCol, asc]);
+  }, [filtered, sortCol, asc]);
 
   function toggleSort(id: string) {
     if (id === sortId) setAsc(!asc);
@@ -55,33 +65,59 @@ export function ResultsTable({
     }
   }
 
+  const activeFilters = Object.values(filters).some((v) => v?.trim());
+
   if (rows.length === 0) return <div className="empty">No stocks matched this view.</div>;
 
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((c) => (
-              <th key={c.id} onClick={() => toggleSort(c.id)}>
-                {c.label}
-                {sortId === c.id ? (asc ? " ▲" : " ▼") : ""}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((r) => (
-            <tr key={r.scrip}>
+    <>
+      <div className="table-meta">
+        <span className="muted">
+          {sorted.length} of {rows.length} rows{activeFilters ? " (filtered)" : ""}
+        </span>
+        {activeFilters && (
+          <button className="ghost" onClick={() => setFilters({})}>
+            Clear filters
+          </button>
+        )}
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
               {columns.map((c) => (
-                <td key={c.id} className={c.digits != null ? "num" : ""}>
-                  {renderCell(r, c)}
-                </td>
+                <th key={c.id} onClick={() => toggleSort(c.id)}>
+                  {c.label}
+                  {sortId === c.id ? (asc ? " ▲" : " ▼") : ""}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+            <tr className="filter-row">
+              {columns.map((c) => (
+                <th key={c.id}>
+                  <input
+                    value={filters[c.id] ?? ""}
+                    onChange={(e) => setFilters((f) => ({ ...f, [c.id]: e.target.value }))}
+                    placeholder={c.digits != null ? ">0" : "filter"}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r) => (
+              <tr key={r.scrip}>
+                {columns.map((c) => (
+                  <td key={c.id} className={c.digits != null ? "num" : ""}>
+                    {renderCell(r, c)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
