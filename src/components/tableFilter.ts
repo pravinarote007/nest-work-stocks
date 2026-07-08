@@ -1,8 +1,9 @@
 // Per-column filter matching for the results tables.
 //
 // Text columns: case-insensitive substring match on the displayed text.
-// Numeric columns: operator (>, <, >=, <=, =) or range ("3..8", "3-8", "3 to 8"); if the
-//   filter isn't a numeric expression it falls back to substring on the formatted text.
+// Numeric columns (always compared numerically; %, commas and spaces are ignored):
+//   >100  <50  >=1  <=200  =3   ranges: 1..50 / 3-8 / 10 to 20
+//   a bare number means ">=" (at-least threshold) — e.g. "1600" => value >= 1600.
 
 export function passesFilter(
   cellText: string,
@@ -40,7 +41,7 @@ export function passesFilter(
       return cellNum >= Math.min(a, b) && cellNum <= Math.max(a, b);
     }
     const single = g.match(/^-?\d+\.?\d*$/);
-    if (single) return cellNum === parseFloat(g);
+    if (single) return cellNum >= parseFloat(g); // bare number = "at least" (>=)
     return false; // unrecognized numeric expression → no match (never substring on a number)
   }
 

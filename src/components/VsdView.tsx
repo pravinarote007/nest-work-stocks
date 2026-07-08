@@ -119,7 +119,12 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
                 <input
                   value={filters[c.id] ?? ""}
                   onChange={(e) => setFilters((f) => ({ ...f, [c.id]: e.target.value }))}
-                  placeholder={c.digits != null ? ">0" : "filter"}
+                  placeholder={c.digits != null ? "≥ …" : "filter"}
+                  title={
+                    c.digits != null
+                      ? "Numbers: a bare value = ≥ (e.g. 1600 → ≥1600). Also >100, <50, >=1, <=200, =3, or ranges 1..50"
+                      : undefined
+                  }
                   onClick={(e) => e.stopPropagation()}
                 />
               </th>

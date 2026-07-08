@@ -8,8 +8,12 @@ describe("passesFilter numeric", () => {
     expect(passesFilter("9", 9, ">10", true)).toBe(false);
     expect(passesFilter("100", 100, ">=50", true)).toBe(true);
     expect(passesFilter("5", 5, "<10", true)).toBe(true);
-    expect(passesFilter("15", 15, "5", true)).toBe(false); // exact, not substring
+    // bare number = ">=" (at-least threshold), never substring
+    expect(passesFilter("1651", 1651, "1600", true)).toBe(true); // 1651 >= 1600
+    expect(passesFilter("517", 517, "1600", true)).toBe(false); // 517 < 1600
     expect(passesFilter("54.80", 54.8, "1..60", true)).toBe(true);
+    expect(passesFilter("40", 40, "=40", true)).toBe(true); // explicit exact
+    expect(passesFilter("41", 41, "=40", true)).toBe(false);
     // % / commas / spaces are ignored on numeric columns
     expect(passesFilter("5.20", 5.2, ">5%", true)).toBe(true);
     expect(passesFilter("1200", 1200, ">1,000", true)).toBe(true);
