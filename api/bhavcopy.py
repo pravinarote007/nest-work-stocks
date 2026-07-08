@@ -28,6 +28,8 @@ from sector_map import to_nse
 ARCHIVE = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{ymd}_F_0000.csv.zip"
 # NSE Index Bhavcopy (all indices, incl. sector/thematic) — plain CSV, dd-mm-yyyy filename.
 INDEX_ARCHIVE = "https://nsearchives.nseindia.com/content/indices/ind_close_all_{dmy}.csv"
+# NSE F&O (derivatives) Bhavcopy — its stock underlyings are the F&O stock universe.
+FO_ARCHIVE = "https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{ymd}_F_0000.csv.zip"
 
 _HEADERS = {
     "User-Agent": (
@@ -202,6 +204,31 @@ def _adjust_series(series: list[tuple[date, dict[str, float]]]):
     return adjusted, events, period_factor
 
 
+def fno_underlyings(session: requests.Session, today: date) -> set[str]:
+    """Set of F&O stock underlying symbols from the most recent F&O Bhavcopy (STF/STO)."""
+    d = today
+    for _ in range(6):
+        if d.weekday() < 5:
+            url = FO_ARCHIVE.format(ymd=d.strftime("%Y%m%d"))
+            try:
+                r = session.get(url, timeout=20)
+                if r.status_code == 200 and r.content:
+                    zf = zipfile.ZipFile(io.BytesIO(r.content))
+                    text = zf.read(zf.namelist()[0]).decode("utf-8", "replace")
+                    out = {
+                        (row.get("TckrSymb") or "").strip().upper()
+                        for row in _csv.DictReader(io.StringIO(text))
+                        if (row.get("FinInstrmTp") or "") in ("STF", "STO")
+                    }
+                    out.discard("")
+                    if out:
+                        return out
+            except (requests.RequestException, zipfile.BadZipFile):
+                pass
+        d -= timedelta(days=1)
+    return set()
+
+
 def _period_open(session: requests.Session, year: int, month: int, dl=_download_day) -> dict[str, float]:
     """Open of every symbol on the first trading day on/after (year, month, 1)."""
     d = date(year, month, 1)
@@ -263,6 +290,8 @@ def fetch_ytd(symbols: list[str], today: date | None = None) -> dict[str, Any]:
         if events:
             splits[sym] = [{"date": ed.isoformat(), "factor": round(ef, 4)} for ed, ef in events]
 
+    fno = fno_underlyings(session, today)  # F&O stock underlyings (to flag/highlight)
+
     return {
         "data": data,
         "errors": errors,
@@ -274,6 +303,7 @@ def fetch_ytd(symbols: list[str], today: date | None = None) -> dict[str, Any]:
             "quarterStart": q_start.isoformat(),
             "monthStart": m_start.isoformat(),
             "splitAdjusted": splits,
+            "fnoSymbols": sorted(fno),
         },
     }
 

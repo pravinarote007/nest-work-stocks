@@ -316,6 +316,10 @@ td.num { font-family: "JetBrains Mono", ui-monospace, monospace; }
 }
 .filter-row select:focus { outline: none; border-color: var(--accent); }
 
+tbody tr.fno-row { background: rgba(91, 140, 255, 0.10); }
+tbody tr.fno-row:hover { background: rgba(91, 140, 255, 0.16); }
+tbody tr.fno-row td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
 .empty { padding: 30px; text-align: center; color: var(--muted); }
 .disclaimer {
   margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-soft);

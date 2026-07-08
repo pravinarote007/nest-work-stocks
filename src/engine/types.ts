@@ -43,12 +43,19 @@ export interface Ind120Row {
   superTrend: number; // ST = LTP > SuperTrend ? Above : Below
 }
 
-/** Fusion Matrix (F&O.csv): sector + segment + DTB level. */
+/** Fusion Matrix (F&O.csv): sector + segment + DTB level + PF-ranking percentages. */
 export interface FusionRow {
   scrip: string; // plain symbol
   sector: string;
   segment: string;
-  dtbLevel: number; // F&O.csv column 31 "DTB Level"
+  dtbLevel: number; // "DTB Level"
+  dbsLevel: number; // "DBS Level"
+  pctFromDtb: number; // "% From DTB"
+  pctFromDbs: number; // "% From DBS"
+  // PF-Ranking percentages (Fusion Matrix cols 11/12/14) shown as 0.25% / 1% / 3%.
+  pct025: number;
+  pct1: number;
+  pct3: number;
 }
 
 /** Bundle of all inputs fed to the engine. RSI/OHLC may come from upload or auto-fetch. */
@@ -98,6 +105,13 @@ export interface SummaryRow {
   st120: string;
   st120Pct: number;
   lcp: number;
+  // From the Fusion Matrix (DTB/DBS levels + PF-Ranking percentages).
+  dbsLevel: number;
+  pctFromDtb: number;
+  pctFromDbs: number;
+  pct025: number;
+  pct1: number;
+  pct3: number;
 }
 
 export type ListKey = "A" | "B" | "C";

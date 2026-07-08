@@ -58,8 +58,12 @@ export function MarketPage({ market }: { market: MarketConfig }) {
       const first = line.split(",")[0]?.trim();
       if (first) syms.add(plainSymbol(first));
     }
-    return [...syms];
-  }, [files.fusion, files.ind120, files.ind015]);
+    let list = [...syms];
+    // Equity markets: drop index rows (e.g. "NIFTY 50", "Nifty Bank") that scanner files
+    // include — the equity Bhavcopy has no indices, so they'd just count as "not found".
+    if (market.source !== "index") list = list.filter((s) => !/^NIFTY/i.test(s));
+    return list;
+  }, [files.fusion, files.ind120, files.ind015, market.source]);
 
   async function handleAutoFetch() {
     setError("");
@@ -103,6 +107,9 @@ export function MarketPage({ market }: { market: MarketConfig }) {
           periods: toPeriods(autoResp!),
           rsi: files.mrsi ? parseMrsi(files.mrsi) : [],
           fusion: files.fusion ? parseFusion(files.fusion) : [],
+          ind015: files.ind015 ? parseInd015(files.ind015) : [],
+          ind120: files.ind120 ? parseInd120(files.ind120) : [],
+          fnoSymbols: autoResp!.meta?.fnoSymbols,
         });
         if ((res as VsdResult).rows.length === 0) {
           setError("No stocks to rank — check the Fusion file and that the OHLC fetch succeeded.");

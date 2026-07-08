@@ -37,6 +37,7 @@ export interface OhlcApiResponse {
     previousMonthDays?: number;
     asOf?: string;
     quarterStartMonth?: number;
+    fnoSymbols?: string[]; // F&O stock underlyings (Nifty 750 / ytd mode)
   };
 }
 

@@ -91,6 +91,12 @@ export function buildSummary(inputs: EngineInputs): SummaryRow[] {
       st120,
       st120Pct,
       lcp: c.lcp,
+      dbsLevel: f?.dbsLevel ?? Number.NaN,
+      pctFromDtb: f?.pctFromDtb ?? Number.NaN,
+      pctFromDbs: f?.pctFromDbs ?? Number.NaN,
+      pct025: f?.pct025 ?? Number.NaN,
+      pct1: f?.pct1 ?? Number.NaN,
+      pct3: f?.pct3 ?? Number.NaN,
     };
   });
 

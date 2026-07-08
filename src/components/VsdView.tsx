@@ -9,6 +9,7 @@ interface VCol {
   label: string;
   digits?: number;
   signed?: boolean;
+  pill?: boolean; // render a Green/Red cloud pill
   get: (r: VsdRow) => string | number;
 }
 
@@ -16,6 +17,7 @@ const rank = (v: number) => (Number.isFinite(v) ? v : "—");
 
 const SUMMARY_STUDY: VCol[] = [
   { id: "scrip", label: "Scrip", get: (r) => r.scrip },
+  { id: "fno", label: "F&O", get: (r) => (r.isFno ? `${r.scrip}-EQ` : "") },
   { id: "sector", label: "Sector", get: (r) => r.sector },
   { id: "segment", label: "Segment", get: (r) => r.segment },
   { id: "lcp", label: "LCP", digits: 2, get: (r) => r.lcp },
@@ -28,10 +30,24 @@ const SUMMARY_STUDY: VCol[] = [
   { id: "rsiDiff", label: "M RSI Diff %", digits: 2, signed: true, get: (r) => r.rsiDiff },
   { id: "rsiDiffRank", label: "M RSI Diff Ranking", digits: 0, get: (r) => rank(r.rsiDiffRank) },
   { id: "crossover", label: "Crossover", get: (r) => r.crossover },
+  { id: "pct025", label: "0.25%", digits: 2, get: (r) => r.pct025 },
+  { id: "pct1", label: "1%", digits: 2, get: (r) => r.pct1 },
+  { id: "pct3", label: "3%", digits: 2, get: (r) => r.pct3 },
+  { id: "dtbLevel", label: "DTB Level", digits: 2, get: (r) => r.dtbLevel },
+  { id: "dbsLevel", label: "DBS Level", digits: 2, get: (r) => r.dbsLevel },
+  { id: "pctFromDtb", label: "% From DTB", digits: 2, signed: true, get: (r) => r.pctFromDtb },
+  { id: "pctFromDbs", label: "% From DBS", digits: 2, signed: true, get: (r) => r.pctFromDbs },
+  { id: "stLevel", label: "ST LEVEL", digits: 2, get: (r) => r.stLevel },
+  { id: "stCloud", label: "ST Cloud", pill: true, get: (r) => r.stCloud },
+  { id: "stPct", label: "ST Could %", digits: 2, signed: true, get: (r) => r.stPct },
+  { id: "mastLevel", label: "MAST LEVEL", digits: 2, get: (r) => r.mastLevel },
+  { id: "mastCloud", label: "MAST Cloud", pill: true, get: (r) => r.mastCloud },
+  { id: "mastPct", label: "MAST Could %", digits: 2, signed: true, get: (r) => r.mastPct },
 ];
 
 const YRANK: VCol[] = [
   { id: "scrip", label: "Scrip", get: (r) => r.scrip },
+  { id: "fno", label: "F&O", get: (r) => (r.isFno ? `${r.scrip}-EQ` : "") },
   { id: "sector", label: "Sector", get: (r) => r.sector },
   { id: "lcp", label: "LCP", digits: 2, get: (r) => r.lcp },
   { id: "yPerf", label: "% change open (Yearly)", digits: 2, signed: true, get: (r) => r.yGreenRange },
@@ -150,9 +166,15 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
         </thead>
         <tbody>
           {sorted.map((r) => (
-            <tr key={r.scrip}>
+            <tr key={r.scrip} className={r.isFno ? "fno-row" : ""}>
               {columns.map((c) => {
                 const t = text(r, c);
+                if (c.pill) {
+                  const tone = /green/i.test(t) ? "green" : /red/i.test(t) ? "red" : "neutral";
+                  return (
+                    <td key={c.id}>{t ? <span className={`pill ${tone}`}>{t}</span> : ""}</td>
+                  );
+                }
                 const cls =
                   c.digits != null && c.signed && Number.isFinite(Number(c.get(r)))
                     ? Number(c.get(r)) >= 0
