@@ -44,9 +44,10 @@ export function MarketPage({ market }: { market: MarketConfig }) {
 
   const onLoad = (id: string, text: string) => {
     setFiles((f) => ({ ...f, [id]: text }));
-    if (id === "curr" || id === "pre" || id === "mrsi") setAutoResp(null);
-    setResult(null);
-    setSavedAt(null);
+    // Manual OHLC upload overrides the auto-fetch; other uploads leave it alone.
+    if (id === "curr" || id === "pre") setAutoResp(null);
+    // Keep the current (shared) results on screen while new files are staged; they are
+    // replaced only when a new scan is generated (or cleared via Reset).
   };
 
   const universe = useMemo(() => {

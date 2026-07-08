@@ -132,7 +132,7 @@ function downloadExcel(result: VsdResult) {
   XLSX.utils.book_append_sheet(wb, sheet(SUMMARY_STUDY), "Summary study");
   XLSX.utils.book_append_sheet(wb, sheet(YRANK), "Y.Rank");
   const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  triggerDownload(new Blob([out], { type: "application/octet-stream" }), "HyperScan VS Dashboard.xlsx");
+  triggerDownload(new Blob([out], { type: "application/octet-stream" }), "HyperScan Nifty 750.xlsx");
 }
 
 const TABS = [

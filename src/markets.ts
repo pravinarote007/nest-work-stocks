@@ -95,8 +95,8 @@ export const MARKETS: MarketConfig[] = [
   },
   {
     id: "vsd",
-    label: "VS Dashboard",
-    blurb: "All NSE · Yearly / Qtr / Monthly",
+    label: "Nifty 750",
+    blurb: "Nifty 750 · Yearly / Qtr / Monthly",
     period: "ytd",
     engine: "vsd",
     cloud: "0.25",
