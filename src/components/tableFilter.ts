@@ -5,11 +5,14 @@
 //   >100  <50  >=1  <=200  =3   ranges: 1..50 / 3-8 / 10 to 20
 //   a bare number means ">=" (at-least threshold) — e.g. "1600" => value >= 1600.
 
+export type BareOp = ">=" | "<=" | "=";
+
 export function passesFilter(
   cellText: string,
   cellNum: number,
   filter: string,
   isNumeric: boolean,
+  bareOp: BareOp = ">=",
 ): boolean {
   const f = filter.trim();
   if (!f) return true;
@@ -41,7 +44,10 @@ export function passesFilter(
       return cellNum >= Math.min(a, b) && cellNum <= Math.max(a, b);
     }
     const single = g.match(/^-?\d+\.?\d*$/);
-    if (single) return cellNum >= parseFloat(g); // bare number = "at least" (>=)
+    if (single) {
+      const n = parseFloat(g); // bare number uses the column's chosen operator
+      return bareOp === "<=" ? cellNum <= n : bareOp === "=" ? cellNum === n : cellNum >= n;
+    }
     return false; // unrecognized numeric expression → no match (never substring on a number)
   }
 

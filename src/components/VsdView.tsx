@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import type { VsdResult, VsdRow } from "../engine/vsd";
 import { triggerDownload } from "../export/toCsv";
-import { passesFilter } from "./tableFilter";
+import { passesFilter, type BareOp } from "./tableFilter";
 
 interface VCol {
   id: string;
@@ -60,15 +60,18 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
   const [sortId, setSortId] = useState(columns[0].id);
   const [asc, setAsc] = useState(true);
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [ops, setOps] = useState<Record<string, BareOp>>({});
   const col = columns.find((c) => c.id === sortId) ?? columns[0];
 
   const filtered = useMemo(() => {
     const active = columns.filter((c) => filters[c.id]?.trim());
     if (active.length === 0) return rows;
     return rows.filter((r) =>
-      active.every((c) => passesFilter(text(r, c), Number(c.get(r)), filters[c.id], c.digits != null)),
+      active.every((c) =>
+        passesFilter(text(r, c), Number(c.get(r)), filters[c.id], c.digits != null, ops[c.id] ?? ">="),
+      ),
     );
-  }, [rows, columns, filters]);
+  }, [rows, columns, filters, ops]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -94,7 +97,7 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
           {sorted.length} of {rows.length} rows{activeFilters ? " (filtered)" : ""}
         </span>
         {activeFilters && (
-          <button className="ghost" onClick={() => setFilters({})}>
+          <button className="ghost" onClick={() => { setFilters({}); setOps({}); }}>
             Clear filters
           </button>
         )}
@@ -116,17 +119,31 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
           <tr className="filter-row">
             {columns.map((c) => (
               <th key={c.id}>
-                <input
-                  value={filters[c.id] ?? ""}
-                  onChange={(e) => setFilters((f) => ({ ...f, [c.id]: e.target.value }))}
-                  placeholder={c.digits != null ? "≥ …" : "filter"}
-                  title={
-                    c.digits != null
-                      ? "Numbers: a bare value = ≥ (e.g. 1600 → ≥1600). Also >100, <50, >=1, <=200, =3, or ranges 1..50"
-                      : undefined
-                  }
-                  onClick={(e) => e.stopPropagation()}
-                />
+                <div className="filter-cell">
+                  {c.digits != null && (
+                    <select
+                      value={ops[c.id] ?? ">="}
+                      onChange={(e) => setOps((o) => ({ ...o, [c.id]: e.target.value as BareOp }))}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Comparison for a plain number"
+                    >
+                      <option value=">=">≥</option>
+                      <option value="<=">≤</option>
+                      <option value="=">=</option>
+                    </select>
+                  )}
+                  <input
+                    value={filters[c.id] ?? ""}
+                    onChange={(e) => setFilters((f) => ({ ...f, [c.id]: e.target.value }))}
+                    placeholder={c.digits != null ? "value" : "filter"}
+                    title={
+                      c.digits != null
+                        ? "Type a number (uses the ≥/≤/= selector). You can also type >100, <50, 1..50 directly."
+                        : undefined
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
               </th>
             ))}
           </tr>
