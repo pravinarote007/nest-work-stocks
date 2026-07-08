@@ -48,6 +48,21 @@ export interface VsdResult {
   rows: VsdRow[];
 }
 
+export interface BroadRanks {
+  yearRank: number;
+  quarterRank: number;
+  monthRank: number;
+}
+
+/** Map scrip -> Yearly/Quarterly/Monthly rank over the Nifty 750 (broad) universe. */
+export function broadRankMap(result: VsdResult): Map<string, BroadRanks> {
+  const m = new Map<string, BroadRanks>();
+  for (const r of result.rows) {
+    m.set(r.scrip, { yearRank: r.yRank, quarterRank: r.qRank, monthRank: r.mRank });
+  }
+  return m;
+}
+
 export interface VsdInputs {
   periods: Record<string, PeriodSet>; // keyed by plain symbol
   rsi: RsiRow[];

@@ -3,7 +3,7 @@ import { FileSlot } from "./FileSlot";
 import { ResultsView } from "./ResultsView";
 import { VsdView } from "./VsdView";
 import { runScreen } from "../engine";
-import { buildVsd, type VsdResult } from "../engine/vsd";
+import { broadRankMap, buildVsd, type VsdResult } from "../engine/vsd";
 import { parseCurrOhlc, parseFusion, parseInd015, parseInd120, parseMrsi, parsePreOhlc } from "../engine/parse";
 import { plainSymbol } from "../engine/keys";
 import { fetchOhlc, toEngineInputs, toPeriods, type OhlcApiResponse } from "../engine/ohlcClient";
@@ -94,7 +94,7 @@ export function MarketPage({ market }: { market: MarketConfig }) {
     ? haveOhlc && Boolean(files.mrsi && files.fusion)
     : haveOhlc && Boolean(files.mrsi);
 
-  function handleGenerate() {
+  async function handleGenerate() {
     setError("");
     try {
       let res: AnyResult;
@@ -123,6 +123,21 @@ export function MarketPage({ market }: { market: MarketConfig }) {
           return;
         }
         res = runScreen(inputs);
+
+        // Apply the Nifty 750 broad-universe Y/Q/M ranks (VLOOKUP by scrip), matching the
+        // master sheet. Falls back to this market's own ranks if 750 hasn't been generated.
+        if (market.useBroadRanks) {
+          const vsd = await loadResult<VsdResult>("vsd");
+          if (vsd?.result?.rows?.length) {
+            const map = broadRankMap(vsd.result);
+            for (const row of (res as ScreenResult).summary) {
+              const b = map.get(row.scrip);
+              row.yearRank = b ? b.yearRank : Number.NaN;
+              row.quarterRank = b ? b.quarterRank : Number.NaN;
+              row.monthRank = b ? b.monthRank : Number.NaN;
+            }
+          }
+        }
       }
       setResult(res);
       setSavedAt(Date.now());

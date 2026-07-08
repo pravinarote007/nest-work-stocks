@@ -14,6 +14,8 @@ export interface MarketConfig {
   period: Period; // OHLC aggregation period
   engine: EngineKind; // "screen" (F&O/N500) or "vsd" (multi-period dashboard)
   source?: "equity" | "index"; // OHLC source — stocks (default) or sector indices
+  /** Use the Nifty 750 (broad-universe) Y/Q/M ranks for this market's ranking columns. */
+  useBroadRanks?: boolean;
   cloud: string; // "0.15" | "0.25" — P&F cloud box (label only)
   views: ViewMode; // which result views to show (screen engine only)
   scanner: SlotSpec[]; // cloud / 120ST / fusion uploads
@@ -71,11 +73,24 @@ const rsiSlot = (suffix: string): SlotSpec => ({
 
 export const MARKETS: MarketConfig[] = [
   {
+    id: "vsd",
+    label: "Nifty 750",
+    blurb: "Nifty 750 · Yearly / Qtr / Monthly",
+    period: "ytd",
+    engine: "vsd",
+    cloud: "0.25",
+    views: "summary",
+    scanner: scannerSlots("0.25", "VSD"),
+    rsi: rsiSlot("VSD"),
+    ohlcFallback: [], // OHLC is always auto-fetched year-to-date
+  },
+  {
     id: "fno",
     label: "F&O",
     blurb: "NSE F&O · Monthly",
     period: "monthly",
     engine: "screen",
+    useBroadRanks: true,
     cloud: "0.15",
     views: "full",
     scanner: scannerSlots("0.15", "F&O"),
@@ -88,23 +103,12 @@ export const MARKETS: MarketConfig[] = [
     blurb: "Nifty 500 · Quarterly",
     period: "quarterly",
     engine: "screen",
+    useBroadRanks: true,
     cloud: "0.25",
     views: "summary",
     scanner: scannerSlots("0.25", "N500"),
     rsi: rsiSlot("N500"),
     ohlcFallback: ohlcSlots("quarterly", "N500"),
-  },
-  {
-    id: "vsd",
-    label: "Nifty 750",
-    blurb: "Nifty 750 · Yearly / Qtr / Monthly",
-    period: "ytd",
-    engine: "vsd",
-    cloud: "0.25",
-    views: "summary",
-    scanner: scannerSlots("0.25", "VSD"),
-    rsi: rsiSlot("VSD"),
-    ohlcFallback: [], // OHLC is always auto-fetched year-to-date
   },
   {
     id: "sectors",
