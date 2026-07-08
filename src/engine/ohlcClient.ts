@@ -26,6 +26,7 @@ export interface OhlcApiResponse {
       months?: MonthlyBar[];
       yearOpen?: number | null;
       quarterOpen?: number | null;
+      monthOpen?: number | null;
       // VS Dashboard ('ytd') mode:
       periods?: { yearly: PeriodBar; quarterly: PeriodBar; monthly: PeriodBar };
     }
@@ -52,11 +53,12 @@ const API_BASE = (import.meta.env?.VITE_API_BASE ?? "").replace(/\/$/, "");
 export async function fetchOhlc(
   symbols: string[],
   period: "monthly" | "quarterly" | "ytd" = "monthly",
+  source: "equity" | "index" = "equity",
 ): Promise<OhlcApiResponse> {
   const res = await fetch(`${API_BASE}/api/ohlc`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ symbols, period }),
+    body: JSON.stringify({ symbols, period, source }),
   });
   if (!res.ok) {
     throw new Error(`OHLC fetch failed: HTTP ${res.status}`);
@@ -86,6 +88,7 @@ export function toEngineInputs(resp: OhlcApiResponse): FetchedOhlc {
     const currBar = bar(scrip, months[months.length - 1]);
     currBar.yearOpen = entry.yearOpen ?? undefined;
     currBar.quarterOpen = entry.quarterOpen ?? undefined;
+    currBar.monthOpen = entry.monthOpen ?? undefined;
     curr.push(currBar);
     if (months.length >= 2) pre.push(bar(scrip, months[months.length - 2]));
   }

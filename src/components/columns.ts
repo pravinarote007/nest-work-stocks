@@ -110,6 +110,7 @@ export const SUMMARY_COLUMNS: ColumnDef[] = [
   { id: "st120Pct", label: "ST 120 %", digits: 2, signed: true, get: (r) => r.st120Pct },
   { id: "yRank", label: "Yearly Ranking", digits: 0, get: (r) => (Number.isFinite(r.yearRank) ? r.yearRank : "—") },
   { id: "qRank", label: "Quarterly Ranking", digits: 0, get: (r) => (Number.isFinite(r.quarterRank) ? r.quarterRank : "—") },
+  { id: "mRank", label: "Monthly Ranking", digits: 0, get: (r) => (Number.isFinite(r.monthRank) ? r.monthRank : "—") },
 ];
 
 export function cellText(row: SummaryRow, col: ColumnDef): string {

@@ -70,7 +70,7 @@ export function MarketPage({ market }: { market: MarketConfig }) {
     setFetching(true);
     setStatus(`Fetching NSE Bhavcopy (${periodWord(market)}) for ${universe.length} symbols…`);
     try {
-      const resp = await fetchOhlc(universe, market.period);
+      const resp = await fetchOhlc(universe, market.period, market.source ?? "equity");
       setAutoResp(resp);
       const n = Object.keys(resp.data).length;
       setAutoCount(n);

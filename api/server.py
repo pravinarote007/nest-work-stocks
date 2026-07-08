@@ -29,12 +29,14 @@ app.add_middleware(
 class OhlcRequest(BaseModel):
     symbols: list[str]
     period: str = "monthly"  # 'monthly' (F&O), 'quarterly' (N500) or 'ytd' (VS Dashboard)
+    source: str = "equity"  # 'equity' (stocks) or 'index' (sector indices)
 
 
 @app.post("/api/ohlc")
 def ohlc(req: OhlcRequest):
     period = req.period if req.period in ("monthly", "quarterly", "ytd") else "monthly"
-    return fetch_ohlc(req.symbols, period)
+    source = "index" if req.source == "index" else "equity"
+    return fetch_ohlc(req.symbols, period, source=source)
 
 
 @app.get("/api/health")

@@ -15,6 +15,8 @@ export interface OhlcRow {
   yearOpen?: number;
   /** Open of the first trading day of the current calendar quarter (for Quarterly RS rank). */
   quarterOpen?: number;
+  /** Open of the first trading day of the current calendar month (for Monthly RS rank). */
+  monthOpen?: number;
 }
 
 /** RSI data, whether uploaded (MRSI_Digger) or computed from monthly closes. */
@@ -79,12 +81,13 @@ export interface SummaryRow {
   retracementRank: number;
   riseFromLowRank: number;
   bullishBORank: number;
-  // Relative-strength performance (% from period open) + ranks over the F&O universe.
+  // Relative-strength performance (% from period open) + ranks over the universe.
   yearlyPerf: number;
   quarterlyPerf: number;
+  monthlyPerf: number;
   yearRank: number;
   quarterRank: number;
-  monthRank: number; // = greenRangeRank (monthly perf == green range)
+  monthRank: number;
   // Detail columns
   sector: string;
   segment: string;

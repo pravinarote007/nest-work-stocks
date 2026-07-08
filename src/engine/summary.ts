@@ -32,6 +32,10 @@ export function buildSummary(inputs: EngineInputs): SummaryRow[] {
       c.quarterOpen && Number.isFinite(c.quarterOpen)
         ? ((c.lcp - c.quarterOpen) / c.quarterOpen) * 100
         : MISSING;
+    // Monthly perf from the month open; falls back to green range (= monthly perf when the
+    // aggregation period is itself monthly, e.g. F&O).
+    const monthlyPerf =
+      c.monthOpen && Number.isFinite(c.monthOpen) ? ((c.lcp - c.monthOpen) / c.monthOpen) * 100 : m.greenRange;
     const r = rsiBy.get(sym);
     const rsiVal = r?.rsi ?? Number.NaN;
     const rsiAvg = r?.rsiAvg ?? Number.NaN;
@@ -74,6 +78,7 @@ export function buildSummary(inputs: EngineInputs): SummaryRow[] {
       bullishBORank: Number.NaN,
       yearlyPerf,
       quarterlyPerf,
+      monthlyPerf,
       yearRank: Number.NaN,
       quarterRank: Number.NaN,
       monthRank: Number.NaN,
@@ -100,6 +105,7 @@ export function buildSummary(inputs: EngineInputs): SummaryRow[] {
   // Relative-strength ranks: rank % performance from period open (NaN where no open data).
   const yRank = rankRowsBy(rows, (r) => (r.yearlyPerf > MISSING ? r.yearlyPerf : Number.NaN));
   const qRank = rankRowsBy(rows, (r) => (r.quarterlyPerf > MISSING ? r.quarterlyPerf : Number.NaN));
+  const mRank = rankRowsBy(rows, (r) => (r.monthlyPerf > MISSING ? r.monthlyPerf : Number.NaN));
 
   for (const row of rows) {
     row.greenRangeRank = grRank.get(row)!;
@@ -110,8 +116,7 @@ export function buildSummary(inputs: EngineInputs): SummaryRow[] {
     row.rsiDiffRank = rdRank.get(row)!;
     row.yearRank = yRank.get(row)!;
     row.quarterRank = qRank.get(row)!;
-    // Monthly RS perf == green range, so monthly RS rank == green-range rank.
-    row.monthRank = row.greenRangeRank;
+    row.monthRank = mRank.get(row)!;
   }
 
   return rows;

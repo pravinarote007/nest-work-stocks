@@ -20,9 +20,14 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from typing import Any
 
+import csv as _csv
 import requests
 
+from sector_map import to_nse
+
 ARCHIVE = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{ymd}_F_0000.csv.zip"
+# NSE Index Bhavcopy (all indices, incl. sector/thematic) — plain CSV, dd-mm-yyyy filename.
+INDEX_ARCHIVE = "https://nsearchives.nseindia.com/content/indices/ind_close_all_{dmy}.csv"
 
 _HEADERS = {
     "User-Agent": (
@@ -118,6 +123,33 @@ def _download_day(session: requests.Session, dt: date) -> dict[str, dict[str, fl
     return out
 
 
+def _download_index_day(session: requests.Session, dt: date) -> dict[str, dict[str, float]] | None:
+    """Return {INDEX_NAME_UPPER: {open,high,low,close}} from the NSE Index Bhavcopy, or None."""
+    url = INDEX_ARCHIVE.format(dmy=dt.strftime("%d%m%Y"))
+    try:
+        r = session.get(url, timeout=20)
+    except requests.RequestException:
+        return None
+    if r.status_code != 200 or not r.content:
+        return None
+    out: dict[str, dict[str, float]] = {}
+    reader = _csv.DictReader(io.StringIO(r.text))
+    for row in reader:
+        name = (row.get("Index Name") or "").strip().upper()
+        if not name:
+            continue
+        try:
+            out[name] = {
+                "open": float(row["Open Index Value"]),
+                "high": float(row["High Index Value"]),
+                "low": float(row["Low Index Value"]),
+                "close": float(row["Closing Index Value"]),
+            }
+        except (KeyError, ValueError):
+            continue
+    return out or None
+
+
 def _agg_bars(bars: list[dict[str, float]]):
     """Aggregate a symbol's daily bars (oldest->newest) into one OHLC bar."""
     if not bars:
@@ -170,12 +202,12 @@ def _adjust_series(series: list[tuple[date, dict[str, float]]]):
     return adjusted, events, period_factor
 
 
-def _period_open(session: requests.Session, year: int, month: int) -> dict[str, float]:
-    """Open price of every stock on the first trading day on/after (year, month, 1)."""
+def _period_open(session: requests.Session, year: int, month: int, dl=_download_day) -> dict[str, float]:
+    """Open of every symbol on the first trading day on/after (year, month, 1)."""
     d = date(year, month, 1)
     for _ in range(15):  # skip weekends/holidays until a Bhavcopy exists
         if d.weekday() < 5:
-            day = _download_day(session, d)
+            day = dl(session, d)
             if day:
                 return {sym: v["open"] for sym, v in day.items()}
         d += timedelta(days=1)
@@ -246,15 +278,23 @@ def fetch_ytd(symbols: list[str], today: date | None = None) -> dict[str, Any]:
     }
 
 
-def fetch_ohlc(symbols: list[str], period: str = "monthly", today: date | None = None) -> dict[str, Any]:
-    """Build current + previous PERIOD OHLC bars for the requested symbols from Bhavcopy.
+def fetch_ohlc(
+    symbols: list[str], period: str = "monthly", today: date | None = None, source: str = "equity"
+) -> dict[str, Any]:
+    """Build current + previous PERIOD OHLC bars for the requested symbols.
     period = 'monthly' (F&O), 'quarterly' (N500) or 'ytd' (VS Dashboard multi-period).
-    Splits are auto-adjusted.
+    source = 'equity' (Common Bhavcopy) or 'index' (Index Bhavcopy — sector indices).
+    Splits are auto-adjusted (a no-op for indices).
 
     Returns {"data": {SYMBOL: {"months": [prevBar, currBar], "yearOpen", "quarterOpen"}},
              "errors": {...}, "meta": {...}} — the contract the frontend expects."""
     if period == "ytd":
         return fetch_ytd(symbols, today)
+    is_index = source == "index"
+    dl = _download_index_day if is_index else _download_day
+    # index day data is keyed by NSE index name; map the requested symbol to it.
+    key_of = to_nse if is_index else (lambda s: s)
+
     wanted = {s.strip().upper() for s in symbols if s and s.strip()}
     today = today or datetime.now().date()
     cy = today.year
@@ -268,7 +308,7 @@ def fetch_ohlc(symbols: list[str], period: str = "monthly", today: date | None =
 
     def fetch(item):
         tag, dt = item
-        return (tag, dt, _download_day(session, dt))
+        return (tag, dt, dl(session, dt))
 
     results = list(ThreadPoolExecutor(max_workers=8).map(fetch, all_days))
 
@@ -277,8 +317,8 @@ def fetch_ohlc(symbols: list[str], period: str = "monthly", today: date | None =
     curr_days_data = sorted(((dt, d) for tag, dt, d in results if tag == "curr" and d), key=lambda x: x[0])
 
     # Calendar period opens for relative-strength ranking (Yearly / Quarterly).
-    year_open = _period_open(session, cy, 1)
-    qtr_open = _period_open(session, cy, qtr_start_month)
+    year_open = _period_open(session, cy, 1, dl)
+    qtr_open = _period_open(session, cy, qtr_start_month, dl)
 
     data: dict[str, Any] = {}
     errors: dict[str, str] = {}
@@ -286,30 +326,37 @@ def fetch_ohlc(symbols: list[str], period: str = "monthly", today: date | None =
     universe = wanted or {sym for _dt, d in prev_days_data + curr_days_data for sym in d}
 
     for sym in universe:
-        # Chronological prev+curr daily series for this symbol, tagged so we can split them
-        # back out after adjustment.
-        prev_series = [(dt, d[sym]) for dt, d in prev_days_data if sym in d]
-        curr_series = [(dt, d[sym]) for dt, d in curr_days_data if sym in d]
+        k = key_of(sym)  # lookup key in the day data (NSE name for indices)
+        # Chronological prev+curr daily series for this symbol.
+        prev_series = [(dt, d[k]) for dt, d in prev_days_data if k in d]
+        curr_series = [(dt, d[k]) for dt, d in curr_days_data if k in d]
         if not curr_series:
             errors[sym] = "no current-period data"
             continue
 
         n_prev = len(prev_series)
         adjusted, events, period_factor = _adjust_series(prev_series + curr_series)
+        curr_adj = adjusted[n_prev:]
         pre = _agg_bars([o for _dt, o in adjusted[:n_prev]])
-        cur = _agg_bars([o for _dt, o in adjusted[n_prev:]])
+        cur = _agg_bars([o for _dt, o in curr_adj])
+
+        # Current calendar-month open (first current-month bar within the fetched window) —
+        # gives a true monthly rank even when the period is quarterly.
+        month_bars = [o for dt, o in curr_adj if dt.month == today.month and dt.year == today.year]
+        month_open = month_bars[0]["open"] if month_bars else (cur["open"] if cur else None)
 
         bars = []
         if pre is not None:
             bars.append({"date": prev_start.isoformat(), **pre})
         bars.append({"date": curr_start.isoformat(), **cur})
-        yo = year_open.get(sym)
-        qo = qtr_open.get(sym)
+        yo = year_open.get(k)
+        qo = qtr_open.get(k)
         data[sym] = {
             "months": bars,
             # Period opens predate the window, so apply the full split adjustment.
             "yearOpen": yo * period_factor if yo else None,
             "quarterOpen": qo * period_factor if qo else None,
+            "monthOpen": month_open,
         }
         if events:
             splits[sym] = [{"date": ed.isoformat(), "factor": round(ef, 4)} for ed, ef in events]

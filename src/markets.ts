@@ -13,6 +13,7 @@ export interface MarketConfig {
   blurb: string;
   period: Period; // OHLC aggregation period
   engine: EngineKind; // "screen" (F&O/N500) or "vsd" (multi-period dashboard)
+  source?: "equity" | "index"; // OHLC source — stocks (default) or sector indices
   cloud: string; // "0.15" | "0.25" — P&F cloud box (label only)
   views: ViewMode; // which result views to show (screen engine only)
   scanner: SlotSpec[]; // cloud / 120ST / fusion uploads
@@ -104,5 +105,44 @@ export const MARKETS: MarketConfig[] = [
     scanner: scannerSlots("0.25", "VSD"),
     rsi: rsiSlot("VSD"),
     ohlcFallback: [], // OHLC is always auto-fetched year-to-date
+  },
+  {
+    id: "sectors",
+    label: "Sectors",
+    blurb: "NSE Sector Indices · Quarterly",
+    period: "quarterly",
+    engine: "screen",
+    source: "index", // OHLC from the NSE Index Bhavcopy
+    cloud: "0.10",
+    views: "summary",
+    // Sector companion files (same structure as the F&O indicator files). Fusion is required
+    // (universe + DTB); the 0.10 cloud + 60-min ST files fill the Cloud / ST columns.
+    scanner: [
+      {
+        id: "fusion",
+        name: "NSE All Sector (universe)",
+        hint: "nse all sector.csv — the sector list + DTB level",
+        expectHeaderIncludes: ["sector", "segment"],
+      },
+      {
+        id: "ind015",
+        name: "0.10 1min cloud",
+        hint: "IndicatorValueTable 0.10 1min sector.csv — P&F cloud",
+        expectHeaderIncludes: ["l2", "dtb"],
+      },
+      {
+        id: "ind120",
+        name: "60 min SuperTrend",
+        hint: "IndicatorValueTable 60 mins sector.csv — SuperTrend",
+        expectHeaderIncludes: ["supertrend"],
+      },
+    ],
+    rsi: {
+      id: "mrsi",
+      name: "MRSI_Digger (RSI source)",
+      hint: "MRSI_Digger sector.csv — exact RSI / RSI Avg per sector",
+      expectHeaderIncludes: ["rsi"],
+    },
+    ohlcFallback: [],
   },
 ];
