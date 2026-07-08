@@ -72,13 +72,14 @@ function VTable({ rows, columns }: { rows: VsdRow[]; columns: VCol[] }) {
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
+    const numeric = col.digits != null;
     copy.sort((a, b) => {
-      const av = col.get(a);
-      const bv = col.get(b);
       let cmp: number;
-      if (typeof av === "number" && typeof bv === "number") {
-        cmp = (Number.isFinite(av) ? av : -Infinity) - (Number.isFinite(bv) ? bv : -Infinity);
-      } else cmp = String(av).localeCompare(String(bv));
+      if (numeric) {
+        const an = Number(col.get(a));
+        const bn = Number(col.get(b));
+        cmp = (Number.isFinite(an) ? an : -Infinity) - (Number.isFinite(bn) ? bn : -Infinity);
+      } else cmp = String(col.get(a)).localeCompare(String(col.get(b)));
       return asc ? cmp : -cmp;
     });
     return copy;

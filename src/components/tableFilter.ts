@@ -13,8 +13,11 @@ export function passesFilter(
   const f = filter.trim();
   if (!f) return true;
 
-  if (isNumeric && Number.isFinite(cellNum)) {
-    const op = f.match(/^(>=|<=|>|<|=)\s*(-?\d+\.?\d*)$/);
+  if (isNumeric) {
+    if (!Number.isFinite(cellNum)) return false; // e.g. "—"/missing rows fail any numeric filter
+    // Ignore %, commas and spaces so ">5%", "1,000", ">= 50" all parse numerically.
+    const g = f.replace(/[%,\s]/g, "");
+    const op = g.match(/^(>=|<=|>|<|=)(-?\d+\.?\d*)$/);
     if (op) {
       const n = parseFloat(op[2]);
       switch (op[1]) {
@@ -30,14 +33,15 @@ export function passesFilter(
           return cellNum === n;
       }
     }
-    const range = f.match(/^(-?\d+\.?\d*)\s*(?:\.\.|to|-)\s*(-?\d+\.?\d*)$/);
+    const range = g.match(/^(-?\d+\.?\d*)(?:\.\.|to|-)(-?\d+\.?\d*)$/);
     if (range) {
       const a = parseFloat(range[1]);
       const b = parseFloat(range[2]);
       return cellNum >= Math.min(a, b) && cellNum <= Math.max(a, b);
     }
-    const single = f.match(/^-?\d+\.?\d*$/);
-    if (single) return cellNum === parseFloat(f);
+    const single = g.match(/^-?\d+\.?\d*$/);
+    if (single) return cellNum === parseFloat(g);
+    return false; // unrecognized numeric expression → no match (never substring on a number)
   }
 
   return cellText.toLowerCase().includes(f.toLowerCase());

@@ -43,14 +43,15 @@ export function ResultsTable({
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
+    const numeric = sortCol.digits != null;
     copy.sort((a, b) => {
-      const av = sortCol.get(a);
-      const bv = sortCol.get(b);
       let cmp: number;
-      if (typeof av === "number" && typeof bv === "number") {
-        cmp = (Number.isFinite(av) ? av : -Infinity) - (Number.isFinite(bv) ? bv : -Infinity);
+      if (numeric) {
+        const an = Number(sortCol.get(a));
+        const bn = Number(sortCol.get(b));
+        cmp = (Number.isFinite(an) ? an : -Infinity) - (Number.isFinite(bn) ? bn : -Infinity);
       } else {
-        cmp = String(av).localeCompare(String(bv));
+        cmp = String(sortCol.get(a)).localeCompare(String(sortCol.get(b)));
       }
       return asc ? cmp : -cmp;
     });
