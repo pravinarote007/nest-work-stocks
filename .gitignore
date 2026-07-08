@@ -20,8 +20,11 @@ data/
 
 # Proprietary sample data + Excel workbooks — not committed.
 Bhavik/
+sectors/
 .cmp/
 .cmp2/
+.n5/
+.vs/
 
 # Editor
 .DS_Store
