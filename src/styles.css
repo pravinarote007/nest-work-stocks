@@ -122,6 +122,46 @@ body {
 
 .app { max-width: 1240px; margin: 0 auto; padding: 26px 24px 72px; }
 
+/* ---------- Shell + left nav ---------- */
+.shell { display: flex; align-items: stretch; min-height: 100vh; }
+.sidebar {
+  width: 240px; flex: none; align-self: flex-start;
+  position: sticky; top: 0; height: 100vh;
+  padding: 20px 16px; display: flex; flex-direction: column; gap: 22px;
+  background: var(--bar-bg); backdrop-filter: blur(14px);
+  border-right: 1px solid var(--border-soft);
+}
+.sidebar .brand { display: flex; align-items: center; gap: 12px; }
+.nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.nav-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--faint); margin: 0 0 4px 6px;
+}
+.nav-item {
+  text-align: left; background: transparent; border: 1px solid transparent; color: var(--text);
+  border-radius: 10px; padding: 10px 12px; cursor: pointer; box-shadow: none;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.nav-item:hover:not(.active) { background: var(--surface-2); transform: none; box-shadow: none; }
+.nav-item.active { background: var(--accent-grad); color: #fff; box-shadow: 0 6px 16px rgba(91, 140, 255, 0.3); }
+.nav-item-label { font-weight: 700; font-size: 14px; }
+.nav-item-sub { font-size: 11px; opacity: 0.8; }
+.sidebar-theme { align-self: flex-start; }
+
+.content { flex: 1; min-width: 0; width: 100%; max-width: 1240px; margin: 0 auto; padding: 26px 28px 72px; }
+.market-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.market-head h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+
+@media (max-width: 760px) {
+  .shell { flex-direction: column; }
+  .sidebar {
+    width: auto; height: auto; position: static;
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px;
+  }
+  .nav { flex-direction: row; flex-wrap: wrap; }
+  .nav-label { display: none; }
+}
+
 /* ---------- Panels ---------- */
 .panel {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent), var(--surface);

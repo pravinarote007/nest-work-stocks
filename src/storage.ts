@@ -1,78 +1,77 @@
-// Shared latest-report persistence.
+// Shared latest-report persistence, per market. Result payload is generic (each market's
+// engine defines its own shape). No DB — one JSON file per market on the server.
 //
-// Primary: the server (/api/report) so the report is GLOBAL — every visitor sees the same
-// latest result. It is replaced on a new generate and removed on reset; no time expiry.
-// Fallback: localStorage (used only if the backend is unreachable, e.g. a static-only deploy).
+// Primary: the server (/api/report?market=ID) so the report is GLOBAL. Fallback: localStorage.
 
-import type { ScreenResult } from "./engine/types";
-
-const KEY = "hyperscan:lastResult:v2";
 const API_BASE = (import.meta.env?.VITE_API_BASE ?? "").replace(/\/$/, "");
+const localKey = (market: string) => `hyperscan:lastResult:v2:${market}`;
 
-export interface LoadedReport {
+export interface LoadedReport<T = unknown> {
   savedAt: number;
-  result: ScreenResult;
+  result: T;
 }
 
 interface Stored {
   savedAt: number;
-  report: ScreenResult;
+  report: unknown;
 }
 
-/** Load the shared report from the server; fall back to localStorage. */
-export async function loadResult(): Promise<LoadedReport | null> {
+/** Load a market's shared report from the server; fall back to localStorage. */
+export async function loadResult<T = unknown>(market: string): Promise<LoadedReport<T> | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/report`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE}/api/report?market=${encodeURIComponent(market)}`, {
+      cache: "no-store",
+    });
     if (res.ok) {
-      const data = (await res.json()) as { report: ScreenResult | null; savedAt: number | null };
+      const data = (await res.json()) as { report: T | null; savedAt: number | null };
       if (data.report && data.savedAt) {
         return { savedAt: data.savedAt, result: data.report };
       }
-      return null; // server reachable but empty (e.g. after reset)
+      return null; // reachable but empty (e.g. after reset)
     }
   } catch {
-    /* backend unreachable — fall through to localStorage */
+    /* backend unreachable */
   }
-  return loadLocal();
+  return loadLocal<T>(market);
 }
 
-/** Save the report globally (server) + cache locally. Returns the saved timestamp. */
-export async function saveResult(result: ScreenResult): Promise<number> {
+/** Save a market's report globally + cache locally. Returns the saved timestamp. */
+export async function saveResult(market: string, result: unknown): Promise<number> {
   const savedAt = Date.now();
-  saveLocal({ savedAt, report: result });
+  saveLocal(market, { savedAt, report: result });
   try {
-    await fetch(`${API_BASE}/api/report`, {
+    await fetch(`${API_BASE}/api/report?market=${encodeURIComponent(market)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ report: result, savedAt }),
     });
   } catch {
-    /* offline — local cache still holds it */
+    /* offline */
   }
   return savedAt;
 }
 
-/** Clear the shared report for everyone (server) + locally. */
-export async function clearResult(): Promise<void> {
+/** Clear a market's shared report for everyone + locally. */
+export async function clearResult(market: string): Promise<void> {
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(localKey(market));
   } catch {
     /* ignore */
   }
   try {
-    await fetch(`${API_BASE}/api/report`, { method: "DELETE" });
+    await fetch(`${API_BASE}/api/report?market=${encodeURIComponent(market)}`, { method: "DELETE" });
   } catch {
     /* ignore */
   }
 }
 
-function loadLocal(): LoadedReport | null {
+function loadLocal<T>(market: string): LoadedReport<T> | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(localKey(market));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Stored;
     if (parsed?.savedAt && parsed?.report) {
-      return { savedAt: parsed.savedAt, result: parsed.report };
+      return { savedAt: parsed.savedAt, result: parsed.report as T };
     }
   } catch {
     /* ignore */
@@ -80,10 +79,10 @@ function loadLocal(): LoadedReport | null {
   return null;
 }
 
-function saveLocal(s: Stored): void {
+function saveLocal(market: string, s: Stored): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    localStorage.setItem(localKey(market), JSON.stringify(s));
   } catch {
-    /* quota — non-fatal */
+    /* quota */
   }
 }

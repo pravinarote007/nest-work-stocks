@@ -10,8 +10,9 @@ import {
 import type { ScreenResult, SummaryRow } from "../engine/types";
 import { downloadCsv } from "../export/toCsv";
 import { downloadExcel } from "../export/toExcel";
-import { ACTION_COLUMNS, RESULT_COLUMNS, RS_COLUMNS, type ColumnDef } from "./columns";
+import { ACTION_COLUMNS, RESULT_COLUMNS, RS_COLUMNS, SUMMARY_COLUMNS, type ColumnDef } from "./columns";
 import { ResultsTable } from "./ResultsTable";
+import type { ViewMode } from "../markets";
 
 interface Tab {
   key: string;
@@ -22,8 +23,16 @@ interface Tab {
   note?: string;
 }
 
-export function ResultsView({ result }: { result: ScreenResult }) {
+export function ResultsView({ result, views = "full" }: { result: ScreenResult; views?: ViewMode }) {
   const tabs: Tab[] = useMemo(() => {
+    const summaryTab: Tab = {
+      key: "SUMMARY",
+      title: "Summary Study",
+      criteria: "The full joined table — every screened stock with all computed metrics, ranks and detail columns.",
+      rows: [...result.summary].sort((a, b) => a.scrip.localeCompare(b.scrip)),
+      columns: SUMMARY_COLUMNS,
+    };
+    if (views === "summary") return [summaryTab];
     return [
       {
         key: "COMMON",
@@ -62,10 +71,11 @@ export function ResultsView({ result }: { result: ScreenResult }) {
         rows: result.lists[d.key],
         columns: RESULT_COLUMNS,
       })),
+      summaryTab,
     ];
-  }, [result]);
+  }, [result, views]);
 
-  const [active, setActive] = useState<string>("COMMON");
+  const [active, setActive] = useState<string>(views === "summary" ? "SUMMARY" : "COMMON");
   const tab = tabs.find((t) => t.key === active) ?? tabs[0];
 
   return (

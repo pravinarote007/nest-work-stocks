@@ -1,45 +1,51 @@
-"""Shared latest-report store (server-side, global to all users).
+"""Shared latest-report store, per market (server-side, global to all users).
 
-Persists the most recently generated screening result to a JSON file so every visitor
-sees the same report. It is replaced when a new report is generated and removed on reset;
-there is no time-based expiry.
+Persists the most recently generated screening result to a JSON file per market id
+(e.g. fno, n500) so every visitor sees the same report. Replaced on a new generate,
+removed on reset; no time-based expiry, and no database — just files.
 
-On Railway, mount a volume and point REPORT_PATH at it (e.g. REPORT_PATH=/data/report.json)
-to survive redeploys; otherwise it persists until the next deploy/restart."""
+Set REPORT_DIR to a Railway volume path to survive redeploys; otherwise reports persist
+until the next deploy/restart."""
 
 import json
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Any
 
-_PATH = Path(
-    os.environ.get("REPORT_PATH", str(Path(__file__).resolve().parent.parent / "data" / "report.json"))
-)
+_DIR = Path(os.environ.get("REPORT_DIR", str(Path(__file__).resolve().parent.parent / "data")))
 _lock = threading.Lock()
 
 
-def load() -> dict[str, Any] | None:
+def _path(market: str) -> Path:
+    safe = re.sub(r"[^a-z0-9_-]", "", (market or "default").lower())[:40] or "default"
+    return _DIR / f"report_{safe}.json"
+
+
+def load(market: str) -> dict[str, Any] | None:
     with _lock:
         try:
-            if _PATH.exists():
-                return json.loads(_PATH.read_text("utf-8"))
+            p = _path(market)
+            if p.exists():
+                return json.loads(p.read_text("utf-8"))
         except (OSError, ValueError):
             return None
     return None
 
 
-def save(report: Any, saved_at: int) -> None:
+def save(market: str, report: Any, saved_at: int) -> None:
     with _lock:
-        _PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = _PATH.with_suffix(".tmp")
+        _DIR.mkdir(parents=True, exist_ok=True)
+        p = _path(market)
+        tmp = p.with_suffix(".tmp")
         tmp.write_text(json.dumps({"savedAt": saved_at, "report": report}), "utf-8")
-        tmp.replace(_PATH)  # atomic-ish swap
+        tmp.replace(p)  # atomic-ish swap
 
 
-def clear() -> None:
+def clear(market: str) -> None:
     with _lock:
         try:
-            _PATH.unlink()
+            _path(market).unlink()
         except FileNotFoundError:
             pass

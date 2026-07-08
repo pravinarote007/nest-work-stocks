@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import report_store
-from bhavcopy import fetch_monthly_ohlc
+from bhavcopy import fetch_ohlc
 
 app = FastAPI(title="HyperScan OHLC API")
 app.add_middleware(
@@ -28,11 +28,13 @@ app.add_middleware(
 
 class OhlcRequest(BaseModel):
     symbols: list[str]
+    period: str = "monthly"  # 'monthly' (F&O), 'quarterly' (N500) or 'ytd' (VS Dashboard)
 
 
 @app.post("/api/ohlc")
 def ohlc(req: OhlcRequest):
-    return fetch_monthly_ohlc(req.symbols)
+    period = req.period if req.period in ("monthly", "quarterly", "ytd") else "monthly"
+    return fetch_ohlc(req.symbols, period)
 
 
 @app.get("/api/health")
@@ -49,23 +51,23 @@ class ReportPayload(BaseModel):
 
 
 @app.get("/api/report")
-def get_report():
-    """The latest shared report, or {"report": null} if none/reset."""
-    return report_store.load() or {"report": None, "savedAt": None}
+def get_report(market: str = "default"):
+    """The latest shared report for a market, or {"report": null} if none/reset."""
+    return report_store.load(market) or {"report": None, "savedAt": None}
 
 
 @app.put("/api/report")
-def put_report(p: ReportPayload):
-    """Save/replace the shared report (called when a user generates results)."""
+def put_report(p: ReportPayload, market: str = "default"):
+    """Save/replace the shared report for a market (called on generate)."""
     saved_at = p.savedAt or int(time.time() * 1000)
-    report_store.save(p.report, saved_at)
+    report_store.save(market, p.report, saved_at)
     return {"savedAt": saved_at}
 
 
 @app.delete("/api/report")
-def delete_report():
-    """Clear the shared report (reset)."""
-    report_store.clear()
+def delete_report(market: str = "default"):
+    """Clear the shared report for a market (reset)."""
+    report_store.clear(market)
     return {"ok": True}
 
 

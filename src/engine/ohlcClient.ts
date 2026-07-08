@@ -12,8 +12,24 @@ export interface MonthlyBar {
   close: number;
 }
 
+export interface PeriodBar {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 export interface OhlcApiResponse {
-  data: Record<string, { months: MonthlyBar[]; yearOpen?: number | null; quarterOpen?: number | null }>;
+  data: Record<
+    string,
+    {
+      months?: MonthlyBar[];
+      yearOpen?: number | null;
+      quarterOpen?: number | null;
+      // VS Dashboard ('ytd') mode:
+      periods?: { yearly: PeriodBar; quarterly: PeriodBar; monthly: PeriodBar };
+    }
+  >;
   errors: Record<string, string>;
   meta?: {
     currentMonthDays?: number;
@@ -33,11 +49,14 @@ export interface FetchedOhlc {
 
 const API_BASE = (import.meta.env?.VITE_API_BASE ?? "").replace(/\/$/, "");
 
-export async function fetchOhlc(symbols: string[]): Promise<OhlcApiResponse> {
+export async function fetchOhlc(
+  symbols: string[],
+  period: "monthly" | "quarterly" | "ytd" = "monthly",
+): Promise<OhlcApiResponse> {
   const res = await fetch(`${API_BASE}/api/ohlc`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ symbols }),
+    body: JSON.stringify({ symbols, period }),
   });
   if (!res.ok) {
     throw new Error(`OHLC fetch failed: HTTP ${res.status}`);
@@ -72,4 +91,16 @@ export function toEngineInputs(resp: OhlcApiResponse): FetchedOhlc {
   }
 
   return { curr, pre, rsi: [], errors: resp.errors ?? {}, meta: resp.meta };
+}
+
+/** Extract the per-symbol Yearly/Quarterly/Monthly period bars (VS Dashboard 'ytd' mode). */
+export function toPeriods(resp: OhlcApiResponse): Record<
+  string,
+  { yearly: PeriodBar; quarterly: PeriodBar; monthly: PeriodBar }
+> {
+  const out: Record<string, { yearly: PeriodBar; quarterly: PeriodBar; monthly: PeriodBar }> = {};
+  for (const [scrip, entry] of Object.entries(resp.data)) {
+    if (entry.periods) out[scrip] = entry.periods;
+  }
+  return out;
 }

@@ -46,15 +46,38 @@ def _make_session() -> requests.Session:
     return s
 
 
-def _trading_days(year: int, month: int, upto: date | None = None) -> list[date]:
-    last = calendar.monthrange(year, month)[1]
-    end = last if upto is None else min(last, upto.day)
+def _trading_days_between(start: date, end: date) -> list[date]:
+    """Weekdays in [start, end] (holidays are handled later by 404-skip)."""
     days = []
-    for d in range(1, end + 1):
-        dt = date(year, month, d)
-        if dt.weekday() < 5:  # Mon–Fri (holidays handled by 404 skip)
-            days.append(dt)
+    d = start
+    while d <= end:
+        if d.weekday() < 5:
+            days.append(d)
+        d += timedelta(days=1)
     return days
+
+
+def _period_windows(today: date, period: str) -> tuple[date, date, date, date, int]:
+    """Return (curr_start, curr_end, prev_start, prev_end, quarter_start_month) for the
+    current & previous month (period='monthly') or quarter (period='quarterly')."""
+    cy, cm = today.year, today.month
+    q_start_month = ((cm - 1) // 3) * 3 + 1
+    if period == "quarterly":
+        curr_start = date(cy, q_start_month, 1)
+        if q_start_month == 1:
+            prev_start = date(cy - 1, 10, 1)
+            prev_end = date(cy - 1, 12, 31)
+        else:
+            prev_start = date(cy, q_start_month - 3, 1)
+            prev_end = date(cy, q_start_month, 1) - timedelta(days=1)
+    else:  # monthly
+        curr_start = date(cy, cm, 1)
+        if cm == 1:
+            prev_start, prev_end = date(cy - 1, 12, 1), date(cy - 1, 12, 31)
+        else:
+            prev_start = date(cy, cm - 1, 1)
+            prev_end = date(cy, cm, 1) - timedelta(days=1)
+    return curr_start, today, prev_start, prev_end, q_start_month
 
 
 def _download_day(session: requests.Session, dt: date) -> dict[str, dict[str, float]] | None:
@@ -159,18 +182,86 @@ def _period_open(session: requests.Session, year: int, month: int) -> dict[str, 
     return {}
 
 
-def fetch_monthly_ohlc(symbols: list[str], months: int = 2, today: date | None = None) -> dict[str, Any]:
-    """Build current + previous month OHLC bars for the requested symbols from Bhavcopy.
-
-    Returns {"data": {SYMBOL: {"months": [prevBar, currBar]}}, "errors": {...},
-             "meta": {...}} — matching the contract the frontend expects."""
+def fetch_ytd(symbols: list[str], today: date | None = None) -> dict[str, Any]:
+    """VS Dashboard mode: fetch year-to-date daily Bhavcopy once and aggregate Yearly,
+    Quarterly and Monthly OHLC per stock (split-adjusted). Returns
+    {"data": {SYMBOL: {"periods": {yearly, quarterly, monthly}}}, "errors", "meta"}."""
     wanted = {s.strip().upper() for s in symbols if s and s.strip()}
     today = today or datetime.now().date()
-    cy, cm = today.year, today.month
-    py, pm = (cy - 1, 12) if cm == 1 else (cy, cm - 1)
+    cy = today.year
+    year_start = date(cy, 1, 1)
+    q_start = date(cy, ((today.month - 1) // 3) * 3 + 1, 1)
+    m_start = date(cy, today.month, 1)
 
-    curr_days = _trading_days(cy, cm, upto=today)
-    prev_days = _trading_days(py, pm)
+    days = _trading_days_between(year_start, today)
+    session = _make_session()
+
+    def fetch(dt):
+        return (dt, _download_day(session, dt))
+
+    results = [r for r in ThreadPoolExecutor(max_workers=8).map(fetch, days) if r[1]]
+    by_day = sorted(results, key=lambda x: x[0])
+
+    data: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+    splits: dict[str, Any] = {}
+    universe = wanted or {sym for _dt, d in by_day for sym in d}
+
+    for sym in universe:
+        series = [(dt, d[sym]) for dt, d in by_day if sym in d]
+        if not series:
+            errors[sym] = "no data"
+            continue
+        adjusted, events, _pf = _adjust_series(series)
+
+        def agg(from_date: date):
+            return _agg_bars([o for dt, o in adjusted if dt >= from_date])
+
+        yearly = agg(year_start)
+        if yearly is None:
+            errors[sym] = "no data"
+            continue
+        data[sym] = {
+            "periods": {
+                "yearly": yearly,
+                "quarterly": agg(q_start) or yearly,
+                "monthly": agg(m_start) or agg(q_start) or yearly,
+            }
+        }
+        if events:
+            splits[sym] = [{"date": ed.isoformat(), "factor": round(ef, 4)} for ed, ef in events]
+
+    return {
+        "data": data,
+        "errors": errors,
+        "meta": {
+            "period": "ytd",
+            "asOf": today.isoformat(),
+            "tradingDays": len(by_day),
+            "yearStart": year_start.isoformat(),
+            "quarterStart": q_start.isoformat(),
+            "monthStart": m_start.isoformat(),
+            "splitAdjusted": splits,
+        },
+    }
+
+
+def fetch_ohlc(symbols: list[str], period: str = "monthly", today: date | None = None) -> dict[str, Any]:
+    """Build current + previous PERIOD OHLC bars for the requested symbols from Bhavcopy.
+    period = 'monthly' (F&O), 'quarterly' (N500) or 'ytd' (VS Dashboard multi-period).
+    Splits are auto-adjusted.
+
+    Returns {"data": {SYMBOL: {"months": [prevBar, currBar], "yearOpen", "quarterOpen"}},
+             "errors": {...}, "meta": {...}} — the contract the frontend expects."""
+    if period == "ytd":
+        return fetch_ytd(symbols, today)
+    wanted = {s.strip().upper() for s in symbols if s and s.strip()}
+    today = today or datetime.now().date()
+    cy = today.year
+    curr_start, curr_end, prev_start, prev_end, qtr_start_month = _period_windows(today, period)
+
+    curr_days = _trading_days_between(curr_start, curr_end)
+    prev_days = _trading_days_between(prev_start, prev_end)
     all_days = [("prev", d) for d in prev_days] + [("curr", d) for d in curr_days]
 
     session = _make_session()
@@ -186,7 +277,6 @@ def fetch_monthly_ohlc(symbols: list[str], months: int = 2, today: date | None =
     curr_days_data = sorted(((dt, d) for tag, dt, d in results if tag == "curr" and d), key=lambda x: x[0])
 
     # Calendar period opens for relative-strength ranking (Yearly / Quarterly).
-    qtr_start_month = ((cm - 1) // 3) * 3 + 1
     year_open = _period_open(session, cy, 1)
     qtr_open = _period_open(session, cy, qtr_start_month)
 
@@ -201,7 +291,7 @@ def fetch_monthly_ohlc(symbols: list[str], months: int = 2, today: date | None =
         prev_series = [(dt, d[sym]) for dt, d in prev_days_data if sym in d]
         curr_series = [(dt, d[sym]) for dt, d in curr_days_data if sym in d]
         if not curr_series:
-            errors[sym] = "no current-month data"
+            errors[sym] = "no current-period data"
             continue
 
         n_prev = len(prev_series)
@@ -211,8 +301,8 @@ def fetch_monthly_ohlc(symbols: list[str], months: int = 2, today: date | None =
 
         bars = []
         if pre is not None:
-            bars.append({"date": date(py, pm, 1).isoformat(), **pre})
-        bars.append({"date": date(cy, cm, 1).isoformat(), **cur})
+            bars.append({"date": prev_start.isoformat(), **pre})
+        bars.append({"date": curr_start.isoformat(), **cur})
         yo = year_open.get(sym)
         qo = qtr_open.get(sym)
         data[sym] = {
@@ -225,12 +315,20 @@ def fetch_monthly_ohlc(symbols: list[str], months: int = 2, today: date | None =
             splits[sym] = [{"date": ed.isoformat(), "factor": round(ef, 4)} for ed, ef in events]
 
     meta = {
+        "period": period,
         "currentMonthDays": len(curr_days_data),
         "previousMonthDays": len(prev_days_data),
         "asOf": today.isoformat(),
+        "currentStart": curr_start.isoformat(),
+        "previousStart": prev_start.isoformat(),
         "yearOpenStocks": len(year_open),
         "quarterOpenStocks": len(qtr_open),
         "quarterStartMonth": qtr_start_month,
         "splitAdjusted": splits,
     }
     return {"data": data, "errors": errors, "meta": meta}
+
+
+# Backwards-compatible alias.
+def fetch_monthly_ohlc(symbols: list[str], months: int = 2, today: date | None = None) -> dict[str, Any]:
+    return fetch_ohlc(symbols, "monthly", today)

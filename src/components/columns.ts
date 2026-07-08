@@ -83,6 +83,35 @@ export const RS_COLUMNS: ColumnDef[] = [
   { id: "st120", label: "120 ST", pill: "st", get: (r) => r.st120 },
 ];
 
+// The full "Summary STudy" joined table (mirrors the workbook sheet).
+export const SUMMARY_COLUMNS: ColumnDef[] = [
+  { id: "scrip", label: "Scrip", get: (r) => r.scrip },
+  { id: "sector", label: "Sector", get: (r) => r.sector },
+  { id: "segment", label: "Segment", get: (r) => r.segment },
+  { id: "lcp", label: "LCP", digits: 2, get: (r) => r.lcp },
+  { id: "rsiAvg", label: "RSI Avg", digits: 2, get: (r) => r.rsiAvg },
+  { id: "rsiDiff", label: "RSI Avg diff %", digits: 2, signed: true, get: (r) => r.rsiDiff },
+  { id: "rsi", label: "RSI Value", digits: 2, get: (r) => r.rsi },
+  { id: "rsiDiffRank", label: "Ranking RSI diff", digits: 0, get: (r) => r.rsiDiffRank },
+  { id: "rsiValueRank", label: "Ranking RSI Value", digits: 0, get: (r) => r.rsiValueRank },
+  { id: "greenRange", label: "Green Range %", digits: 2, signed: true, get: (r) => r.greenRange },
+  { id: "retracement", label: "Retracement from High %", digits: 2, signed: true, get: (r) => r.retracement },
+  { id: "riseFromLow", label: "Rise From Low %", digits: 2, signed: true, get: (r) => r.riseFromLow },
+  { id: "bullishBO", label: "Bullish BO %", digits: 2, signed: true, get: (r) => r.bullishBO },
+  { id: "greenRangeRank", label: "Rank Green Range", digits: 0, get: (r) => r.greenRangeRank },
+  { id: "retracementRank", label: "Rank Retracement", digits: 0, get: (r) => r.retracementRank },
+  { id: "riseFromLowRank", label: "Rank Rise From Low", digits: 0, get: (r) => r.riseFromLowRank },
+  { id: "bullishBORank", label: "Rank Bullish BO", digits: 0, get: (r) => r.bullishBORank },
+  { id: "cloud", label: "Cloud", pill: "cloud", get: (r) => r.cloud },
+  { id: "cloudPct", label: "Cloud %", digits: 2, signed: true, get: (r) => r.cloudPct },
+  { id: "dtbLevel", label: "DTB Level", digits: 2, get: (r) => r.dtbLevel },
+  { id: "dtbPct", label: "% DTB Level", digits: 2, signed: true, get: (r) => r.dtbPct },
+  { id: "st120", label: "ST 120", pill: "st", get: (r) => r.st120 },
+  { id: "st120Pct", label: "ST 120 %", digits: 2, signed: true, get: (r) => r.st120Pct },
+  { id: "yRank", label: "Yearly Ranking", digits: 0, get: (r) => (Number.isFinite(r.yearRank) ? r.yearRank : "—") },
+  { id: "qRank", label: "Quarterly Ranking", digits: 0, get: (r) => (Number.isFinite(r.quarterRank) ? r.quarterRank : "—") },
+];
+
 export function cellText(row: SummaryRow, col: ColumnDef): string {
   const v = col.get(row);
   if (col.digits == null) return v == null ? "" : String(v);
